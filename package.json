@@ -1,0 +1,29 @@
+{
+  "name": "couple-moments-bot",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node --watch bot.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.10.0",
+    "dotenv": "^16.6.1",
+    "node-cron": "^3.0.3",
+    "sharp": "^0.33.5",
+    "telegraf": "^4.16.3"
+  },
+  "description": "",
+  "main": "bot.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/romanglitch/couple-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/romanglitch/couple-bot/issues"
+  },
+  "homepage": "https://github.com/romanglitch/couple-bot#readme"
+}

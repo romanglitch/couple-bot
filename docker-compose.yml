@@ -1,0 +1,11 @@
+services:
+  couple-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: couple-bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      # Данные живут на хосте, переживают пересборку и обновления
+      - ./data:/app/data
