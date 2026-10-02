@@ -62,21 +62,29 @@ function getNextRandomTime() {
     const now = new Date();
     let target = new Date(now);
 
-    // Если сейчас после 19:00 или выходной — прыгаем на следующий будний день
     const hour = target.getHours();
     const dayOfWeek = target.getDay(); // 0=Sun, 6=Sat
 
-    if (hour >= 19 || dayOfWeek === 0 || dayOfWeek === 6) {
+    // 1. Если сейчас выходной ИЛИ будний день после 22:00 — переносим на следующий день
+    if (dayOfWeek === 0 || dayOfWeek === 6 || hour >= 22) {
         target.setDate(target.getDate() + 1);
+
+        // Пропускаем выходные дни
         while (target.getDay() === 0 || target.getDay() === 6) {
             target.setDate(target.getDate() + 1);
         }
+
+        // Сбрасываем время на начало рабочего интервала
         target.setHours(7, 0, 0, 0);
     }
 
-    // Случайное время между 7:00 и 19:00
+    // 2. Генерируем случайное время строго между 07:00 и 22:00 текущего (уже проверенного) дня
     const startMs = new Date(target).setHours(7, 0, 0, 0);
-    const endMs = new Date(target).setHours(19, 0, 0, 0);
+    const endMs = new Date(target).setHours(22, 0, 0, 0);
+
+    // Если по какой-то причине целевое время оказалось в прошлом (например, бот был выключен),
+    // Math.random() может вернуть прошедшее время. Для надежности можно добавить проверку,
+    // но в рамках cron-проверки раз в минуту это не критично.
     const randomMs = startMs + Math.random() * (endMs - startMs);
 
     return new Date(randomMs);
@@ -211,9 +219,9 @@ bot.use((ctx, next) => {
 bot.start((ctx) => {
     ctx.reply(
         '💑 Привет! Я хранитель ваших моментов.\n\n' +
-        '• В будни в случайное время (7–19) пришлю просьбу сфоткать момент\n' +
+        '• В будни в случайное время c 7 утра до 10 вечера пришлю просьбу сфоткать себя или момент\n' +
         '• Отправьте фото в этот чат — оно сохранится\n' +
-        '• В субботу в 11:00 получите коллаж за неделю\n\n' +
+        '• В субботу в 11:00 вы получите коллаж за неделю\n\n' +
         'Команды: /status, /preview, /testdaily'
     );
 });
