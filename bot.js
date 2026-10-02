@@ -279,8 +279,8 @@ bot.command('status', (ctx) => {
     ctx.reply(
         `📊 Статус:\n` +
         `• Фото за эту неделю: ${photos.length}\n` +
-        `• Следующая отправка: ${sched ? new Date(sched.next_send_time).toLocaleString('ru-RU') : 'не запланировано'}\n` +
-        `• Текущая неделя: ${weekKey}`
+        `• Следующая отправка: ${sched ? new Date(sched.next_send_time).toLocaleString('ru-RU') : 'не запланировано'}\n`
+        // `• Текущая неделя: ${weekKey}`
     );
 });
 
