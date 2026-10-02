@@ -7,5 +7,11 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      # Данные живут на хосте, переживают пересборку и обновления
       - ./data:/app/data
+    entrypoint: ["/sbin/tini", "--"]
+    command: >
+      sh -c "
+        mkdir -p /app/data/photos &&
+        chown -R node:node /app/data &&
+        exec node bot.js
+      "
