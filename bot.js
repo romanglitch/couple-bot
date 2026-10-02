@@ -265,21 +265,48 @@ bot.command('preview', async (ctx) => {
 // Обработка входящих фото
 bot.on('photo', async (ctx) => {
     const photo = ctx.message.photo[ctx.message.photo.length - 1]; // Наибольшее разрешение
-    const fileLink = await ctx.telegram.getFileLink(photo.file_id);
+
+    let fileLink;
+    try {
+        fileLink = await ctx.telegram.getFileLink(photo.file_id);
+    } catch (err) {
+        console.error('[Photo Error] Failed to get file link:', err.message);
+        return ctx.reply('⚠️ Не удалось получить ссылку на фото. Попробуйте отправить ещё раз.');
+    }
 
     const fileName = `${Date.now()}_${ctx.from.id}.jpg`;
     const filePath = path.join(PHOTOS_DIR, fileName);
 
-    // Скачиваем фото
-    const response = await fetch(fileLink.toString());
-    const arrayBuffer = await response.arrayBuffer();
-    fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+    try {
+        // Скачиваем фото с таймаутом и AbortController
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 секунд на скачивание
 
-    const weekKey = getWeekKey();
-    stmts.insertPhoto.run(String(ctx.from.id), filePath, weekKey);
+        const response = await fetch(fileLink.toString(), { signal: controller.signal });
+        clearTimeout(timeoutId);
 
-    const weekPhotos = stmts.getWeekPhotos.all(weekKey);
-    await ctx.reply(`💾 Сохранено! Фото за эту неделю: ${weekPhotos.length}`);
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status} while downloading photo`);
+        }
+
+        const arrayBuffer = await response.arrayBuffer();
+        fs.writeFileSync(filePath, Buffer.from(arrayBuffer));
+
+        const weekKey = getWeekKey();
+        stmts.insertPhoto.run(String(ctx.from.id), filePath, weekKey);
+
+        const weekPhotos = stmts.getWeekPhotos.all(weekKey);
+        await ctx.reply(`💾 Сохранено! Фото за эту неделю: ${weekPhotos.length}`);
+    } catch (err) {
+        console.error(`[Photo Download Error] User ${ctx.from.id}:`, err.message);
+
+        // Убираем частично скачанный файл, если он есть
+        if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+
+        await ctx.reply('⏳ Не удалось скачать фото (таймаут или ошибка сети). Пожалуйста, попробуйте ещё раз.');
+    }
 });
 
 // ==========================================
