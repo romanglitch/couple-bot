@@ -35,6 +35,44 @@ db.exec(`
   );
 `);
 
+// Добавляем таблицу для трекинга ежедневных загрузок
+db.exec(`
+  CREATE TABLE IF NOT EXISTS daily_tracking (
+    user_id TEXT PRIMARY KEY,
+    request_time TEXT,       -- Время отправки daily prompt
+    photo_received INTEGER DEFAULT 0, -- 1 если фото загружено сегодня
+    last_reminder_time TEXT  -- Время последнего напоминания
+  );
+`);
+
+// Новые prepared statements
+Object.assign(stmts, {
+    upsertTracking: db.prepare(`
+        INSERT INTO daily_tracking (user_id, request_time, photo_received, last_reminder_time)
+        VALUES (?, ?, 0, NULL)
+        ON CONFLICT(user_id) DO UPDATE SET
+            request_time = excluded.request_time,
+            photo_received = 0,
+            last_reminder_time = NULL
+    `),
+    markPhotoReceived: db.prepare(`
+        UPDATE daily_tracking 
+        SET photo_received = 1 
+        WHERE user_id = ? AND date(request_time) = date('now', 'localtime')
+    `),
+    getPendingReminders: db.prepare(`
+        SELECT * FROM daily_tracking 
+        WHERE photo_received = 0 
+          AND request_time IS NOT NULL
+          AND date(request_time) = date('now', 'localtime')
+    `),
+    updateReminderTime: db.prepare(`
+        UPDATE daily_tracking 
+        SET last_reminder_time = datetime('now', 'localtime') 
+        WHERE user_id = ?
+    `),
+});
+
 const stmts = {
     insertPhoto: db.prepare('INSERT INTO photos (user_id, file_path, week_key) VALUES (?, ?, ?)'),
     getWeekPhotos: db.prepare('SELECT * FROM photos WHERE week_key = ? ORDER BY created_at ASC'),
@@ -295,6 +333,9 @@ bot.on('photo', async (ctx) => {
         const weekKey = getWeekKey();
         stmts.insertPhoto.run(String(ctx.from.id), filePath, weekKey);
 
+        // Отмечаем, что пользователь выполнил задание на сегодня
+        stmts.markPhotoReceived.run(String(ctx.from.id));
+
         const weekPhotos = stmts.getWeekPhotos.all(weekKey);
         await ctx.reply(`💾 Сохранено! Фото за эту неделю: ${weekPhotos.length}`);
     } catch (err) {
@@ -324,9 +365,12 @@ async function sendDailyPrompt() {
     if (!message) message = getFallbackDaily();
 
     // Отправляем обоим пользователям
+    // Внутри sendDailyPrompt(), после цикла отправки сообщений
     for (const userId of ALLOWED_USERS) {
         try {
             await bot.telegram.sendMessage(userId, message);
+            // Фиксируем время запроса и сбрасываем статус загрузки
+            stmts.upsertTracking.run(String(userId));
         } catch (err) {
             console.error(`[Send Error] User ${userId}:`, err.message);
         }
@@ -398,6 +442,41 @@ cron.schedule('* * * * *', async () => {
     if (now >= nextTime) {
         console.log(`[Scheduler] Triggering daily prompt at ${now.toLocaleString('ru-RU')}`);
         await sendDailyPrompt();
+    }
+});
+
+// Проверка необходимости напоминаний каждую минуту
+cron.schedule('* * * * *', async () => {
+    const now = new Date();
+    const pending = stmts.getPendingReminders.all();
+
+    for (const track of pending) {
+        const requestTime = new Date(track.request_time);
+        const lastReminder = track.last_reminder_time ? new Date(track.last_reminder_time) : null;
+
+        const minsSinceRequest = (now - requestTime) / 60000;
+        const minsSinceLastReminder = lastReminder ? (now - lastReminder) / 60000 : Infinity;
+
+        let shouldRemind = false;
+
+        // Первое напоминание через 5 минут после запроса
+        if (!lastReminder && minsSinceRequest >= 5) {
+            shouldRemind = true;
+        }
+        // Повторные каждые 10 минут
+        else if (lastReminder && minsSinceLastReminder >= 10) {
+            shouldRemind = true;
+        }
+
+        if (shouldRemind) {
+            try {
+                await bot.telegram.sendMessage(track.user_id, '🥺 Не забудьте отправить фото сегодня! Я очень жду.');
+                stmts.updateReminderTime.run(track.user_id);
+                console.log(`[Reminder] Sent to ${track.user_id}`);
+            } catch (err) {
+                console.error(`[Reminder Error] User ${track.user_id}:`, err.message);
+            }
+        }
     }
 });
 
