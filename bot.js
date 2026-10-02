@@ -89,11 +89,18 @@ const ALLOWED_USERS = new Set([process.env.USER_1_ID, process.env.USER_2_ID]);
 function getWeekKey(date = new Date()) {
     const d = new Date(date);
     d.setHours(0, 0, 0, 0);
+
     // Понедельник как начало недели
     const day = d.getDay();
     const diff = d.getDate() - day + (day === 0 ? -6 : 1);
     const monday = new Date(d.setDate(diff));
-    return monday.toISOString().slice(0, 10);
+
+    // Форматирование в dd.mm.yyyy
+    const dd = String(monday.getDate()).padStart(2, '0');
+    const mm = String(monday.getMonth() + 1).padStart(2, '0'); // Месяцы в JS начинаются с 0
+    const yyyy = monday.getFullYear();
+
+    return `${dd}.${mm}.${yyyy}`;
 }
 
 function getNextRandomTime() {
